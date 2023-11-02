@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 import torchvision
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import torchvision.transforms as T
 
 @threestudio.register("prolificdreamer_multi-system")
 class ProlificDreamerMulti(BaseLift3DSystem):
@@ -52,14 +53,17 @@ class ProlificDreamerMulti(BaseLift3DSystem):
                                 azimuth = torch.zeros(self.n_particles, device = self.device) + 45.0, 
                                 camera_distances = torch.zeros(self.n_particles, device = self.device) + 1.25, seed=self.global_step)
 
-            img_save = torchvision.utils.make_grid(self.ref_images.permute(0,3,1,2)).permute(1,2,0).detach().cpu().numpy()
-            plt.axis('off')
-            plt.imshow(img_save)
-            plt.savefig('foo.png')
-
-            
-
-
+#             img_save = torchvision.utils.make_grid(self.ref_images.permute(0,3,1,2)).permute(1,2,0).detach().cpu().numpy()
+#             plt.axis('off')
+#             plt.imshow(img_save)
+#             plt.savefig('foo.png')
+            transform = T.ToPILImage()
+            for i in range(self.ref_images.shape[0]):
+#                 breakpoint()
+                img = transform(self.ref_images[i].permute(2,0,1))
+                img.save(f"/home/ubuntu/stable_dreamfusion/threestudio/text_inverse/img_{i}.png")
+            breakpoint()
+                
 
         self.dino = torch.hub.load('facebookresearch/dino:main', 'dino_vits8', pretrained=False)
         self.dino.load_state_dict(torch.load("/home/ubuntu/stable_dreamfusion/threestudio/dino_deitsmall8_pretrain.pth"))
