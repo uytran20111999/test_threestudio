@@ -1,7 +1,7 @@
 name: "prolificdreamer"
 tag: "${rmspace:${system.prompt_processor.prompt},_}"
 exp_root_dir: "outputs"
-seed: 20
+seed: 200000
 
 data_type: "random-camera-datamodule"
 data:
@@ -25,7 +25,7 @@ system:
   stage: coarse
   n_particles: 6
   geometry_type: "implicit-volume"
-  hiper_path: "/home/ubuntu/stable_dreamfusion/HiPer/all_ckpt"
+  hiper_path: "/home/ubuntu/stable_dreamfusion/HiPer/all_ckpt_bunny"
   system_type: "prolificdreamer_multi-system"
   geometry:
     radius: 1.0
