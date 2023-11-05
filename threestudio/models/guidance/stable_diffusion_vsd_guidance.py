@@ -43,7 +43,7 @@ class StableDiffusionVSDGuidance(BaseModule):
         enable_attention_slicing: bool = False
         enable_channels_last_format: bool = False
         guidance_scale: float = 7.5
-        guidance_scale_lora: float = 1.0
+        guidance_scale_lora: float = 1
         grad_clip: Optional[
             Any
         ] = None  # field(default_factory=lambda: [0, 2.0, 8.0, 1000])
@@ -458,18 +458,20 @@ class StableDiffusionVSDGuidance(BaseModule):
         text_embeddings_vd: Float[Tensor, "BB 77 768"],
         text_embeddings: Float[Tensor, "BB 77 768"],
         camera_condition: Float[Tensor, "B 4 4"],
+        t = None,
     ):
         B = latents.shape[0]
 
         with torch.no_grad():
             # random timestamp
-            t = torch.randint(
-                self.min_step,
-                self.max_step + 1,
-                [B],
-                dtype=torch.long,
-                device=self.device,
-            )
+            if t is None:
+                t = torch.randint(
+                    self.min_step,
+                    self.max_step + 1,
+                    [B],
+                    dtype=torch.long,
+                    device=self.device,
+                )
             # breakpoint()
             # add noise
             noise = torch.randn_like(latents)
@@ -549,7 +551,6 @@ class StableDiffusionVSDGuidance(BaseModule):
     ):
         B = latents.shape[0]
         latents = latents.detach().repeat(self.cfg.lora_n_timestamp_samples, 1, 1, 1)
-
         t = torch.randint(
             int(self.num_train_timesteps * 0.0),
             int(self.num_train_timesteps * 1.0),
@@ -570,7 +571,7 @@ class StableDiffusionVSDGuidance(BaseModule):
             )
         # use view-independent text embeddings in LoRA
         text_embeddings_cond, _ = text_embeddings.chunk(2)
-        if self.cfg.lora_cfg_training and random.random() < 0.1:
+        if self.cfg.lora_cfg_training and random.random() < 0.6:
             camera_condition = torch.zeros_like(camera_condition)
         noise_pred = self.forward_unet(
             self.unet_lora,
@@ -619,20 +620,30 @@ class StableDiffusionVSDGuidance(BaseModule):
         # breakpoint()
         rgb_BCHW = rgb.permute(0, 3, 1, 2)
         latents = self.get_latents(rgb_BCHW, rgb_as_latents=rgb_as_latents)
+        B = latents.shape[0]
+        t = torch.randint(
+            self.min_step,
+            self.max_step + 1,
+            [B],
+            dtype=torch.long,
+            device=self.device,
+        )
 
         # view-dependent text embeddings
         text_embeddings_vd = prompt_utils.get_text_embeddings(
             elevation,
             azimuth,
             camera_distances,
+            cur_t = t, num_train_step= self.num_train_timesteps,
             view_dependent_prompting=self.cfg.view_dependent_prompting,
-            hiper_guidance = hiper_guidance,
+            hiper_guidance = hiper_guidance, 
         )
 
         # input text embeddings, view-independent
         text_embeddings = prompt_utils.get_text_embeddings(
-            elevation, azimuth, camera_distances, view_dependent_prompting=False,
-            hiper_guidance = hiper_guidance
+            elevation, azimuth, camera_distances, 
+            cur_t = t, num_train_step= self.num_train_timesteps,view_dependent_prompting=False,
+            hiper_guidance = hiper_guidance,
         )
 
         if self.cfg.camera_condition_type == "extrinsics":

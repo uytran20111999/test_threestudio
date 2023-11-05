@@ -53,6 +53,8 @@ class PromptProcessorOutput:
         elevation: Float[Tensor, "B"],
         azimuth: Float[Tensor, "B"],
         camera_distances: Float[Tensor, "B"],
+        cur_t,
+        num_train_step,
         view_dependent_prompting: bool = True,
         hiper_guidance = None
     ) -> Float[Tensor, "BB N Nf"]:
@@ -76,11 +78,13 @@ class PromptProcessorOutput:
             )
         
         # breakpoint()
+        t_0 = cur_t[0]
+        scale = (cur_t/num_train_step)*0.8 + (1-cur_t/num_train_step)
         if hiper_guidance is not None:
             n_hiper = hiper_guidance.shape[1]
             # scale = torch.norm(text_embeddings[:,:-n_hiper],dim=[-1,-2]).mean()
             # hiper_guidance = scale*hiper_guidance/(torch.norm(hiper_guidance, dim=[-1,-2], keepdim = True)+0.000001)
-            text_embeddings = torch.concat([text_embeddings[:,:-n_hiper] , hiper_guidance.expand(text_embeddings.shape[0],-1,-1)], dim = 1)
+            text_embeddings = torch.concat([text_embeddings[:,:-n_hiper] , hiper_guidance.expand(text_embeddings.shape[0],-1,-1)*1], dim = 1)
 
         # IMPORTANT: we return (cond, uncond), which is in different order than other implementations!
         return torch.cat([text_embeddings, uncond_text_embeddings], dim=0)
