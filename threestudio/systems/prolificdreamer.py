@@ -19,6 +19,7 @@ class ProlificDreamer(BaseLift3DSystem):
         visualize_samples: bool = False
         system_type: str = "prolificdreamer-system"
         n_particles: int = 4
+        hiper_path: str = ""
 
     cfg: Config
 

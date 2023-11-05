@@ -22,7 +22,6 @@ from threestudio.utils.base import BaseModule
 from threestudio.utils.misc import C, cleanup, parse_version
 from threestudio.utils.typing import *
 
-
 class ToWeightsDType(nn.Module):
     def __init__(self, module: nn.Module, dtype: torch.dtype):
         super().__init__()
@@ -150,6 +149,8 @@ class StableDiffusionVSDGuidance(BaseModule):
         self.camera_embedding = ToWeightsDType(
             TimestepEmbedding(16, 1280), self.weights_dtype
         ).to(self.device)
+
+
         self.unet_lora.class_embedding = self.camera_embedding
 
         # set up LoRA layers
@@ -407,6 +408,7 @@ class StableDiffusionVSDGuidance(BaseModule):
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Float[Tensor, "..."]:
         input_dtype = latents.dtype
+        # breakpoint()
         return unet(
             latents.to(self.weights_dtype),
             t.to(self.weights_dtype),
@@ -468,6 +470,7 @@ class StableDiffusionVSDGuidance(BaseModule):
                 dtype=torch.long,
                 device=self.device,
             )
+            # breakpoint()
             # add noise
             noise = torch.randn_like(latents)
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
@@ -579,6 +582,7 @@ class StableDiffusionVSDGuidance(BaseModule):
             class_labels=camera_condition.view(B, -1).repeat(
                 self.cfg.lora_n_timestamp_samples, 1
             ),
+
             cross_attention_kwargs={"scale": 1.0},
         )
         return F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
@@ -608,10 +612,11 @@ class StableDiffusionVSDGuidance(BaseModule):
         mvp_mtx: Float[Tensor, "B 4 4"],
         c2w: Float[Tensor, "B 4 4"],
         rgb_as_latents=False,
+        hiper_guidance = None,
         **kwargs,
     ):
         batch_size = rgb.shape[0]
-
+        # breakpoint()
         rgb_BCHW = rgb.permute(0, 3, 1, 2)
         latents = self.get_latents(rgb_BCHW, rgb_as_latents=rgb_as_latents)
 
@@ -621,11 +626,13 @@ class StableDiffusionVSDGuidance(BaseModule):
             azimuth,
             camera_distances,
             view_dependent_prompting=self.cfg.view_dependent_prompting,
+            hiper_guidance = hiper_guidance,
         )
 
         # input text embeddings, view-independent
         text_embeddings = prompt_utils.get_text_embeddings(
-            elevation, azimuth, camera_distances, view_dependent_prompting=False
+            elevation, azimuth, camera_distances, view_dependent_prompting=False,
+            hiper_guidance = hiper_guidance
         )
 
         if self.cfg.camera_condition_type == "extrinsics":

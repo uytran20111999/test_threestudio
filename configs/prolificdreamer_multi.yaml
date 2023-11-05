@@ -1,7 +1,7 @@
 name: "prolificdreamer"
 tag: "${rmspace:${system.prompt_processor.prompt},_}"
 exp_root_dir: "outputs"
-seed: 0
+seed: 20
 
 data_type: "random-camera-datamodule"
 data:
@@ -25,6 +25,7 @@ system:
   stage: coarse
   n_particles: 6
   geometry_type: "implicit-volume"
+  hiper_path: "/home/ubuntu/stable_dreamfusion/HiPer/all_ckpt"
   system_type: "prolificdreamer_multi-system"
   geometry:
     radius: 1.0
@@ -60,15 +61,15 @@ system:
 
   prompt_processor_type: "stable-diffusion-prompt-processor"
   prompt_processor:
-    pretrained_model_name_or_path: "stabilityai/stable-diffusion-2-1-base"
+    pretrained_model_name_or_path: "/home/ubuntu/stable_dreamfusion/HiPer/stable-diffusion-v1-4"
     prompt: ???
     front_threshold: 30.
     back_threshold: 30.
 
   guidance_type: "stable-diffusion-vsd-guidance"
   guidance:
-    pretrained_model_name_or_path: "stabilityai/stable-diffusion-2-1-base"
-    pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1"
+    pretrained_model_name_or_path: "/home/ubuntu/stable_dreamfusion/HiPer/stable-diffusion-v1-4"
+    pretrained_model_name_or_path_lora: "/home/ubuntu/stable_dreamfusion/HiPer/stable-diffusion-v1-4"
     guidance_scale: 7.5
     min_step_percent: 0.02
     max_step_percent: [5000, 0.98, 0.5, 5001] # annealed to 0.5 after 5000 steps

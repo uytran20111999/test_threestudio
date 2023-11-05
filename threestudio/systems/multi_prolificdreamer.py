@@ -16,6 +16,19 @@ import torchvision
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import torchvision.transforms as T
+import copy
+import glob
+import re
+
+def sort_key(file_path):
+    # Extract the index from the file path using regular expressions
+    match = re.search(r'(\d+)\.pt$', file_path)
+    if match:
+        index = int(match.group(1))
+        return index
+    else:
+        # Return a large number for file paths that don't match the pattern
+        return float('inf')
 
 @threestudio.register("prolificdreamer_multi-system")
 class ProlificDreamerMulti(BaseLift3DSystem):
@@ -26,6 +39,7 @@ class ProlificDreamerMulti(BaseLift3DSystem):
         visualize_samples: bool = False
         system_type: str = "prolificdreamer_multi-system"
         n_particles: int = 4
+        hiper_path: str = "/home/ubuntu/stable_dreamfusion/HiPer/all_ckpt"
 
 
     cfg: Config
@@ -40,34 +54,49 @@ class ProlificDreamerMulti(BaseLift3DSystem):
         #     self.cfg.prompt_processor
         # )
         # self.prompt_utils = self.prompt_processor()
+        self.n_particles = self.cfg.n_particles
         self.guidance = threestudio.find(self.cfg.guidance_type)(self.cfg.guidance).to(self.device)
 
+        # omega_dict_settings = [copy.deepcopy(self.cfg.prompt_processor) for _ in range(self.n_particles)]
+        # for i in range(len(omega_dict_settings)):
+        #     omega_dict_settings[i]['prompt'] = f"A high quality photo of an <ice_cream{i}>"
 
-        self.prompt_processor = threestudio.find(self.cfg.prompt_processor_type)(
-            self.cfg.prompt_processor
-        )
+        # self.prompt_processor = [threestudio.find(self.cfg.prompt_processor_type)(
+        #     omega_dict_settings[i]
+        # ) for i in range(self.n_particles)]
+        # breakpoint()
+
+        #delete duplicate tokenizer/text encoder
+        # for i in range(1, self.n_particles):
+        #     self.prompt_processor[i].destroy_text_encoder()
+        #     self.prompt_processor[i].tokenizer = self.prompt_processor[0].tokenizer
+        #     self.prompt_processor[i].text_encoder = self.prompt_processor[0].text_encoder
+        self.prompt_processor = threestudio.find(self.cfg.prompt_processor_type)(self.cfg.prompt_processor)
         self.prompt_utils = self.prompt_processor()
-        self.n_particles = self.cfg.n_particles
-        with torch.no_grad():
-            self.ref_images = self.guidance.sample(self.prompt_utils, elevation = torch.zeros(self.n_particles, device = self.device), 
-                                azimuth = torch.zeros(self.n_particles, device = self.device) + 45.0, 
-                                camera_distances = torch.zeros(self.n_particles, device = self.device) + 1.25, seed=self.global_step)
+        self.hiper_ckpt_path = sorted(glob.glob(f'{self.cfg.hiper_path}/*.pt'), key=sort_key)
+        self.hiper_ckpt = [torch.load(self.hiper_ckpt_path[i]) for i in range(len(self.hiper_ckpt_path))]
+        [p.requires_grad_(False) for p in self.hiper_ckpt]
+        # breakpoint()
+#         with torch.no_grad():
+#             self.ref_images = self.guidance.sample(self.prompt_utils, elevation = torch.zeros(self.n_particles, device = self.device), 
+#                                 azimuth = torch.zeros(self.n_particles, device = self.device) + 45.0, 
+#                                 camera_distances = torch.zeros(self.n_particles, device = self.device) + 1.25, seed=self.global_step)
 
-#             img_save = torchvision.utils.make_grid(self.ref_images.permute(0,3,1,2)).permute(1,2,0).detach().cpu().numpy()
-#             plt.axis('off')
-#             plt.imshow(img_save)
-#             plt.savefig('foo.png')
-            transform = T.ToPILImage()
-            for i in range(self.ref_images.shape[0]):
-#                 breakpoint()
-                img = transform(self.ref_images[i].permute(2,0,1))
-                img.save(f"/home/ubuntu/stable_dreamfusion/threestudio/text_inverse/img_{i}.png")
-            breakpoint()
+# #             img_save = torchvision.utils.make_grid(self.ref_images.permute(0,3,1,2)).permute(1,2,0).detach().cpu().numpy()
+# #             plt.axis('off')
+# #             plt.imshow(img_save)
+# #             plt.savefig('foo.png')
+#             transform = T.ToPILImage()
+#             for i in range(self.ref_images.shape[0]):
+# #                 breakpoint()
+#                 img = transform(self.ref_images[i].permute(2,0,1))
+#                 img.save(f"/home/ubuntu/stable_dreamfusion/threestudio/text_inverse/img_{i}.png")
+#             breakpoint()
                 
 
-        self.dino = torch.hub.load('facebookresearch/dino:main', 'dino_vits8', pretrained=False)
-        self.dino.load_state_dict(torch.load("/home/ubuntu/stable_dreamfusion/threestudio/dino_deitsmall8_pretrain.pth"))
-        self.dino = self.dino.eval()
+        # self.dino = torch.hub.load('facebookresearch/dino:main', 'dino_vits8', pretrained=False)
+        # self.dino.load_state_dict(torch.load("/home/ubuntu/stable_dreamfusion/threestudio/dino_deitsmall8_pretrain.pth"))
+        # self.dino = self.dino.eval()
         # config_copy = self.cfg.copy()
         # del config_copy.n_particles
         del self.geometry
@@ -99,24 +128,25 @@ class ProlificDreamerMulti(BaseLift3DSystem):
 
     def training_step(self, batch, batch_idx):
         # breakpoint()
-        sample = random.sample(list(range(self.n_particles)), 2)
-        idx1, idx2 = sample
+        idx = random.randint(0, self.n_particles -1)
+        # idx1, idx2 = sample
         # idx = random.randint(0, self.n_particles -1)
-        out = self(batch, idx1)
-        selected_img = self.ref_images[idx1:idx1+1]
+        out = self(batch, idx)
+        # selected_img = self.ref_images[idx1:idx1+1]
         # breakpoint()
-        selected_img = self.transform(selected_img.permute(0,3,1,2))
-        rendered_rgb = self.transform(out["comp_rgb"].permute(0,3,1,2))
-
+        # selected_img = self.transform(selected_img.permute(0,3,1,2))
+        # rendered_rgb = self.transform(out["comp_rgb"].permute(0,3,1,2))
+        self.hiper_ckpt[idx] = self.hiper_ckpt[idx].to(device = out["comp_rgb"].device)
+        # breakpoint()
         if self.cfg.stage == "geometry":
             guidance_inp = out["comp_normal"]
             guidance_out = self.guidance(
-                guidance_inp, self.prompt_utils, **batch, rgb_as_latents=False
+                guidance_inp, self.prompt_utils, **batch, rgb_as_latents=False, hiper_guidance = self.hiper_ckpt[idx]
             )
         else:
             guidance_inp = out["comp_rgb"]
             guidance_out = self.guidance(
-                guidance_inp, self.prompt_utils, **batch, rgb_as_latents=False
+                guidance_inp, self.prompt_utils, **batch, rgb_as_latents=False, hiper_guidance = self.hiper_ckpt[idx]
             )
 
         loss = 0.0
@@ -125,16 +155,16 @@ class ProlificDreamerMulti(BaseLift3DSystem):
             self.log(f"train/{name}", value)
             if name.startswith("loss_"):
                 loss += value * self.C(self.cfg.loss[name.replace("loss_", "lambda_")])
-        dino_rendered = self.dino(rendered_rgb)
-        dino_selected = self.dino(selected_img)
-        loss_MSE = F.mse_loss(dino_rendered, dino_selected)
-        with torch.no_grad():
-            out_next = self(batch, idx2)
-            rendered_rgb2 = self.transform(out_next["comp_rgb"].permute(0,3,1,2))
-            dino_rendered2 = self.dino(rendered_rgb2)
-        loss_between_nerf = F.mse_loss(dino_rendered, dino_rendered2)
-        # loss += 0.05*loss_MSE
-        loss -= 0.1*loss_between_nerf
+        # dino_rendered = self.dino(rendered_rgb)
+        # dino_selected = self.dino(selected_img)
+        # loss_MSE = F.mse_loss(dino_rendered, dino_selected)
+        # with torch.no_grad():
+        #     out_next = self(batch, idx2)
+        #     rendered_rgb2 = self.transform(out_next["comp_rgb"].permute(0,3,1,2))
+        #     dino_rendered2 = self.dino(rendered_rgb2)
+        # loss_between_nerf = F.mse_loss(dino_rendered, dino_rendered2)
+        # # loss += 0.05*loss_MSE
+        # loss -= 0.1*loss_between_nerf
         if self.cfg.stage == "coarse":
             if self.C(self.cfg.loss.lambda_orient) > 0:
                 if "normal" not in out:
@@ -193,9 +223,6 @@ class ProlificDreamerMulti(BaseLift3DSystem):
 
         for name, value in self.cfg.loss.items():
             self.log(f"train_params/{name}", self.C(value))
-
-
-
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -243,13 +270,13 @@ class ProlificDreamerMulti(BaseLift3DSystem):
                         {
                             "type": "rgb",
                             "img": self.guidance.sample(
-                                self.prompt_utils, **batch, seed=self.global_step
+                                self.prompt_utils[i], **batch, seed=self.global_step
                             )[0],
                             "kwargs": {"data_format": "HWC"},
                         },
                         {
                             "type": "rgb",
-                            "img": self.guidance.sample_lora(self.prompt_utils, **batch)[0],
+                            "img": self.guidance.sample_lora(self.prompt_utils[i], **batch)[0],
                             "kwargs": {"data_format": "HWC"},
                         },
                     ],
@@ -313,13 +340,10 @@ class ProlificDreamerMulti(BaseLift3DSystem):
     # def configure_optimizers(self):
     #     breakpoint()
     #     optim = parse_optimizer(self.cfg.optimizer, self)
+    #     param_dicts = [name,value in self.cfg.optimizers.items()]
+    #     #optimim[i] is parram[i]
     #     ret = {
     #         "optimizer": optim,
     #     }
-    #     if self.cfg.scheduler is not None:
-    #         ret.update(
-    #             {
-    #                 "lr_scheduler": parse_scheduler(self.cfg.scheduler, optim),
-    #             }
-    #         )
+
     #     return ret
